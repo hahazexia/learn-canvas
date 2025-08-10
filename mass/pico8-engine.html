@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PICO-8 Style Engine</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        pico: {
+                            bg: '#111114',
+                            border: '#444444',
+                            screen: '#000000',
+                            text: '#ffffff'
+                        }
+                    },
+                    fontFamily: {
+                        pico: ['"Press Start 2P"', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .pixelated {
+                image-rendering: pixelated;
+                image-rendering: -moz-crisp-edges;
+                image-rendering: crisp-edges;
+            }
+            .crt-effect {
+                position: relative;
+            }
+            .crt-effect::after {
+                content: " ";
+                display: block;
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.03));
+                background-size: 100% 2px, 3px 100%;
+                pointer-events: none;
+            }
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+</head>
+<body class="bg-pico-bg text-pico-text min-h-screen flex flex-col items-center justify-center p-4">
+    <div class="mb-6 text-center">
+        <h1 class="font-pico text-xl md:text-2xl mb-2">PICO-8 Style Engine</h1>
+        <p class="text-sm opacity-75">A simplified PICO-8 like engine using HTML5 Canvas</p>
+    </div>
+
+    <!-- Emulated PICO-8 console -->
+    <div class="border-8 border-pico-border rounded-lg bg-pico-screen p-4 relative crt-effect">
+        <canvas id="gameCanvas" class="pixelated w-[512px] h-[512px] bg-[#000000]"></canvas>
+    </div>
+
+    <div class="mt-6 grid grid-cols-2 gap-4 max-w-md w-full">
+        <div class="bg-[#222] p-3 rounded">
+            <h3 class="font-pico text-xs mb-2">Controls</h3>
+            <div class="text-xs space-y-1">
+                <p><span class="text-yellow-400">Arrow keys</span> - Move</p>
+                <p><span class="text-yellow-400">Z</span> - Action 1</p>
+                <p><span class="text-yellow-400">X</span> - Action 2</p>
+            </div>
+        </div>
+        <div class="bg-[#222] p-3 rounded">
+            <h3 class="font-pico text-xs mb-2">Info</h3>
+            <div class="text-xs space-y-1">
+                <p>Resolution: 128x128</p>
+                <p>Colors: PICO-8 palette</p>
+                <p>FPS: 30</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // PICO-8 16-color palette
+        const PICO8_PALETTE = [
+            0x000000, // 0: black
+            0x1d2b53, // 1: dark blue
+            0x7e2553, // 2: dark purple
+            0x008751, // 3: dark green
+            0xab5236, // 4: brown
+            0x5f574f, // 5: dark gray
+            0xc2c3c7, // 6: light gray
+            0xfff1e8, // 7: white
+            0xff004d, // 8: red
+            0xffa300, // 9: orange
+            0xffec27, // 10: yellow
+            0x00e436, // 11: green
+            0x29adff, // 12: blue
+            0x83769c, // 13: indigo
+            0xff77a8, // 14: pink
+            0xffccaa  // 15: peach
+        ];
+
+        // Convert hex color to rgba string
+        function hexToRgba(hex, alpha = 1) {
+            const r = (hex >> 16) & 0xFF;
+            const g = (hex >> 8) & 0xFF;
+            const b = hex & 0xFF;
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+
+        // Engine class
+        class PicoEngine {
+            constructor(canvasId, width = 128, height = 128) {
+                this.canvas = document.getElementById(canvasId);
+                this.ctx = this.canvas.getContext('2d');
+                
+                // Set internal resolution (PICO-8 uses 128x128)
+                this.width = width;
+                this.height = height;
+                this.canvas.width = width;
+                this.canvas.height = height;
+                
+                // Scale for drawing (1:1 pixel mapping)
+                this.scale = 1;
+                
+                // Input handling
+                this.keys = {
+                    left: false,
+                    right: false,
+                    up: false,
+                    down: false,
+                    z: false,
+                    x: false
+                };
+                
+                // Game loop variables
+                this.lastTime = 0;
+                this.fps = 30;
+                this.frameInterval = 1000 / this.fps;
+                this.accumulatedTime = 0;
+                
+                // Bind methods
+                this.handleKeyDown = this.handleKeyDown.bind(this);
+                this.handleKeyUp = this.handleKeyUp.bind(this);
+                this.gameLoop = this.gameLoop.bind(this);
+                
+                // Register event listeners
+                window.addEventListener('keydown', this.handleKeyDown);
+                window.addEventListener('keyup', this.handleKeyUp);
+                
+                // Set default draw state
+                this.resetDrawState();
+                
+                // Game state
+                this.game = {
+                    init: () => {},
+                    update: () => {},
+                    draw: () => {}
+                };
+            }
+            
+            // Reset drawing state to defaults
+            resetDrawState() {
+                this.color = 7; // Default to white
+                this.fillColor = 0; // Default to black
+                this.lineWidth = 1;
+            }
+            
+            // Input handling
+            handleKeyDown(e) {
+                switch(e.key) {
+                    case 'ArrowLeft': this.keys.left = true; break;
+                    case 'ArrowRight': this.keys.right = true; break;
+                    case 'ArrowUp': this.keys.up = true; break;
+                    case 'ArrowDown': this.keys.down = true; break;
+                    case 'z': case 'Z': this.keys.z = true; break;
+                    case 'x': case 'X': this.keys.x = true; break;
+                }
+            }
+            
+            handleKeyUp(e) {
+                switch(e.key) {
+                    case 'ArrowLeft': this.keys.left = false; break;
+                    case 'ArrowRight': this.keys.right = false; break;
+                    case 'ArrowUp': this.keys.up = false; break;
+                    case 'ArrowDown': this.keys.down = false; break;
+                    case 'z': case 'Z': this.keys.z = false; break;
+                    case 'x': case 'X': this.keys.x = false; break;
+                }
+            }
+            
+            // Drawing functions
+            cls(color = 0) {
+                this.ctx.fillStyle = hexToRgba(PICO8_PALETTE[color]);
+                this.ctx.fillRect(0, 0, this.width, this.height);
+            }
+            
+            setColor(index) {
+                if (index >= 0 && index < 16) {
+                    this.color = index;
+                    this.ctx.strokeStyle = hexToRgba(PICO8_PALETTE[index]);
+                }
+            }
+            
+            setFill(colorIndex) {
+                if (colorIndex >= 0 && colorIndex < 16) {
+                    this.fillColor = colorIndex;
+                    this.ctx.fillStyle = hexToRgba(PICO8_PALETTE[colorIndex]);
+                }
+            }
+            
+            setLineWidth(width) {
+                this.lineWidth = width;
+                this.ctx.lineWidth = width;
+            }
+            
+            pixel(x, y, colorIndex = this.color) {
+                this.ctx.fillStyle = hexToRgba(PICO8_PALETTE[colorIndex]);
+                this.ctx.fillRect(x, y, 1, 1);
+            }
+            
+            line(x1, y1, x2, y2) {
+                this.ctx.beginPath();
+                this.ctx.moveTo(x1, y1);
+                this.ctx.lineTo(x2, y2);
+                this.ctx.stroke();
+            }
+            
+            rect(x, y, w, h, fill = false) {
+                this.ctx.beginPath();
+                this.ctx.rect(x, y, w, h);
+                if (fill) {
+                    this.ctx.fill();
+                } else {
+                    this.ctx.stroke();
+                }
+            }
+            
+            circ(x, y, r, fill = false) {
+                this.ctx.beginPath();
+                this.ctx.arc(x, y, r, 0, Math.PI * 2);
+                if (fill) {
+                    this.ctx.fill();
+                } else {
+                    this.ctx.stroke();
+                }
+            }
+            
+            print(text, x, y, colorIndex = this.color) {
+                this.ctx.fillStyle = hexToRgba(PICO8_PALETTE[colorIndex]);
+                this.ctx.font = '8px "Press Start 2P", monospace';
+                this.ctx.fillText(text, x, y);
+            }
+            
+            // Game loop
+            gameLoop(timestamp) {
+                // Calculate delta time
+                const deltaTime = timestamp - this.lastTime;
+                this.lastTime = timestamp;
+                this.accumulatedTime += deltaTime;
+                
+                // Update at fixed intervals
+                while (this.accumulatedTime >= this.frameInterval) {
+                    this.game.update(this.frameInterval / 1000); // Pass seconds
+                    this.accumulatedTime -= this.frameInterval;
+                }
+                
+                // Clear screen and draw
+                this.cls();
+                this.game.draw();
+                
+                // Continue loop
+                requestAnimationFrame(this.gameLoop);
+            }
+            
+            // Start the engine
+            start(game) {
+                // Set up the game
+                this.game = game;
+                this.game.init();
+                
+                // Start the loop
+                requestAnimationFrame((timestamp) => {
+                    this.lastTime = timestamp;
+                    this.gameLoop(timestamp);
+                });
+            }
+        }
+
+        // Example game using the engine
+        document.addEventListener('DOMContentLoaded', () => {
+            // Create engine instance
+            const engine = new PicoEngine('gameCanvas');
+            
+            // Game state
+            const gameState = {
+                x: 64,
+                y: 64,
+                speed: 2,
+                direction: 0,
+                colorIndex: 8,
+                shape: 'circle'
+            };
+            
+            // Example game implementation
+            const exampleGame = {
+                init() {
+                    // Initialization code
+                },
+                
+                update(dt) {
+                    // Handle input
+                    if (engine.keys.left) gameState.x -= gameState.speed;
+                    if (engine.keys.right) gameState.x += gameState.speed;
+                    if (engine.keys.up) gameState.y -= gameState.speed;
+                    if (engine.keys.down) gameState.y += gameState.speed;
+                    
+                    // Change color with Z
+                    if (engine.keys.z) {
+                        gameState.colorIndex = (gameState.colorIndex + 1) % 16;
+                    }
+                    
+                    // Change shape with X
+                    if (engine.keys.x) {
+                        gameState.shape = gameState.shape === 'circle' ? 'square' : 'circle';
+                    }
+                    
+                    // Keep within bounds
+                    gameState.x = Math.max(8, Math.min(engine.width - 8, gameState.x));
+                    gameState.y = Math.max(8, Math.min(engine.height - 8, gameState.y));
+                    
+                    // Rotate direction
+                    gameState.direction += 0.1;
+                },
+                
+                draw() {
+                    // Draw background grid
+                    engine.setColor(1);
+                    for (let x = 0; x < engine.width; x += 16) {
+                        engine.line(x, 0, x, engine.height);
+                    }
+                    for (let y = 0; y < engine.height; y += 16) {
+                        engine.line(0, y, engine.width, y);
+                    }
+                    
+                    // Draw player
+                    engine.setColor(gameState.colorIndex);
+                    engine.setFill(gameState.colorIndex);
+                    
+                    if (gameState.shape === 'circle') {
+                        engine.circ(gameState.x, gameState.y, 8, true);
+                    } else {
+                        engine.rect(gameState.x - 8, gameState.y - 8, 16, 16, true);
+                    }
+                    
+                    // Draw direction indicator
+                    engine.setColor(7);
+                    const dirX = Math.cos(gameState.direction) * 10;
+                    const dirY = Math.sin(gameState.direction) * 10;
+                    engine.line(gameState.x, gameState.y, gameState.x + dirX, gameState.y + dirY);
+                    
+                    // Draw info text
+                    engine.print(`X: ${Math.round(gameState.x)}`, 4, 12, 10);
+                    engine.print(`Y: ${Math.round(gameState.y)}`, 4, 24, 10);
+                    engine.print(`Color: ${gameState.colorIndex}`, 4, 36, 12);
+                    engine.print(`Shape: ${gameState.shape}`, 4, 48, 14);
+                    
+                    // Draw controls hint
+                    engine.print("Z: Change color", 4, 110, 6);
+                    engine.print("X: Change shape", 4, 122, 6);
+                }
+            };
+            
+            // Start the game
+            engine.start(exampleGame);
+        });
+    </script>
+</body>
+</html>
