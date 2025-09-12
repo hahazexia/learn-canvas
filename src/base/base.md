@@ -37,7 +37,7 @@
       let height = 0;
       let timer = setInterval(() => {
         height++;
-        ctx.clearRect(0, 0, c1.clientWidth, height);
+        ctx.clearRect(0, 0, c1.clientWidth, height); // 将画布中矩形区域全部擦除掉
         if (height > c1.clientHeight) {
           clearInterval(timer);
         }
@@ -118,6 +118,36 @@
       // 嘴巴
       ctx.arc(75, 75, 35, 0, Math.PI);
 
+      ctx.stroke();
+      ctx.closePath();
+    </script>
+  </body>
+</html>
+```
+
+- 画线段
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    <canvas id="c1" width="600" height="400"></canvas>
+
+    <script>
+      const c1 = document.getElementById('c1');
+      // 获取画笔 上下文对象
+      const ctx = c1.getContext('2d');
+
+      ctx.beginPath();
+      ctx.moveTo(300, 200);
+      ctx.lineTo(350, 250); // 画直线到指定坐标
+      ctx.lineTo(350, 200);
+      ctx.lineTo(300, 200);
       ctx.stroke();
       ctx.closePath();
     </script>

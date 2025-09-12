@@ -12,23 +12,27 @@
       const c1 = document.getElementById('c1');
       // 获取画笔 上下文对象
       const ctx = c1.getContext('2d');
-      // 画矩形 fillRext(x, y, width, height)
+      // 画矩形 fillRext(x, y, width, height) 填充模式
       // ctx.fillRect(100, 200, 300, 300);
+      // 画矩形路径 strokeRect(x, y, width, height) 路径模式
+      // ctx.strokeRect(100, 200, 300, 300);
 
-      ctx.beginPath();
-      ctx.rect(100, 100, 200, 100);
-      ctx.stroke();
-      ctx.closePath();
+      // 下面的写法是 fillRect 和 strokeRect 的分解写法
+
+      ctx.beginPath(); // 开始绘制新路径
+      ctx.rect(100, 100, 200, 100); // 添加一个矩形到当前路径，从 x 100 y 100 位置开始绘制， width 200 height 100
+      ctx.stroke(); //绘制路径
+      ctx.closePath(); // 结束路径
 
       ctx.beginPath();
       ctx.rect(200, 150, 200, 100);
-      ctx.fill();
+      ctx.fill(); // 填充当前路径
       ctx.closePath();
 
       let height = 0;
       let timer = setInterval(() => {
         height++;
-        ctx.clearRect(0, 0, c1.clientWidth, height);
+        ctx.clearRect(0, 0, c1.clientWidth, height); // 将画布中矩形区域全部擦除掉
         if (height > c1.clientHeight) {
           clearInterval(timer);
         }
